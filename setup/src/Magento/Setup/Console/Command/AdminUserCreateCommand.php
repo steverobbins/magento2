@@ -55,16 +55,17 @@ class AdminUserCreateCommand extends AbstractSetupCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $errors = $this->validate($input);
+        $data = $this->getUserData($input, $output);
+        $errors = $this->validate($data);
         if ($errors) {
             $output->writeln('<error>' . implode('</error>' . PHP_EOL .  '<error>', $errors) . '</error>');
             // we must have an exit code higher than zero to indicate something was wrong
             return \Magento\Framework\Console\Cli::RETURN_FAILURE;
         }
         $installer = $this->installerFactory->create(new ConsoleLogger($output));
-        $installer->installAdminUser($input->getOptions());
+        $installer->installAdminUser($data);
         $output->writeln(
-            '<info>Created Magento administrator user named ' . $input->getOption(AdminAccount::KEY_USER) . '</info>'
+            '<info>Created Magento administrator user named ' . $data[AdminAccount::KEY_USER] . '</info>'
         );
     }
 
@@ -76,20 +77,20 @@ class AdminUserCreateCommand extends AbstractSetupCommand
     public function getOptionsList()
     {
         return [
-            new InputOption(AdminAccount::KEY_USER, null, InputOption::VALUE_REQUIRED, '(Required) Admin user'),
-            new InputOption(AdminAccount::KEY_PASSWORD, null, InputOption::VALUE_REQUIRED, '(Required) Admin password'),
-            new InputOption(AdminAccount::KEY_EMAIL, null, InputOption::VALUE_REQUIRED, '(Required) Admin email'),
+            new InputOption(AdminAccount::KEY_USER, null, InputOption::VALUE_REQUIRED, 'Admin user'),
+            new InputOption(AdminAccount::KEY_PASSWORD, null, InputOption::VALUE_REQUIRED, 'Admin password'),
+            new InputOption(AdminAccount::KEY_EMAIL, null, InputOption::VALUE_REQUIRED, 'Admin email'),
             new InputOption(
                 AdminAccount::KEY_FIRST_NAME,
                 null,
                 InputOption::VALUE_REQUIRED,
-                '(Required) Admin first name'
+                'Admin first name'
             ),
             new InputOption(
                 AdminAccount::KEY_LAST_NAME,
                 null,
                 InputOption::VALUE_REQUIRED,
-                '(Required) Admin last name'
+                'Admin last name'
             ),
         ];
     }
@@ -97,20 +98,20 @@ class AdminUserCreateCommand extends AbstractSetupCommand
     /**
      * Check if all admin options are provided
      *
-     * @param InputInterface $input
+     * @param string[] $input
      * @return string[]
      */
-    public function validate(InputInterface $input)
+    public function validate($data)
     {
         $errors = [];
         $user = new \Magento\Framework\DataObject();
-        $user->setFirstname($input->getOption(AdminAccount::KEY_FIRST_NAME))
-            ->setLastname($input->getOption(AdminAccount::KEY_LAST_NAME))
-            ->setUsername($input->getOption(AdminAccount::KEY_USER))
-            ->setEmail($input->getOption(AdminAccount::KEY_EMAIL))
+        $user->setFirstname($data[AdminAccount::KEY_FIRST_NAME])
+            ->setLastname($data[AdminAccount::KEY_LAST_NAME])
+            ->setUsername($data[AdminAccount::KEY_USER])
+            ->setEmail($data[AdminAccount::KEY_EMAIL])
             ->setPassword(
-                $input->getOption(AdminAccount::KEY_PASSWORD) === null
-                ? '' : $input->getOption(AdminAccount::KEY_PASSWORD)
+                $data[AdminAccount::KEY_PASSWORD] === null
+                ? '' : $data[AdminAccount::KEY_PASSWORD]
             );
 
         $validator = new \Magento\Framework\Validator\DataObject;
@@ -122,5 +123,37 @@ class AdminUserCreateCommand extends AbstractSetupCommand
         }
 
         return $errors;
+    }
+
+    /**
+     * Get admin user data
+     *
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @return string[]
+     */
+    protected function getUserData(InputInterface $input, OutputInterface $output)
+    {
+        $dialog = $this->getHelper('dialog');
+        $data = [];
+        $keys = [
+            AdminAccount::KEY_FIRST_NAME,
+            AdminAccount::KEY_LAST_NAME,
+            AdminAccount::KEY_USER,
+            AdminAccount::KEY_EMAIL,
+            AdminAccount::KEY_PASSWORD,
+        ];
+        foreach ($keys as $key) {
+            if ($value = $input->getOption($key)) {
+                $data[$key] = $value;
+            } else {
+                $method = $key === AdminAccount::KEY_PASSWORD ? 'askHiddenResponse' : 'ask';
+                $data[$key] = $dialog->$method(
+                    $output,
+                    '<info>' . ucwords(str_replace('-', ' ', $key)) . '</info>: '
+                );
+            }
+        }
+        return $data;
     }
 }
