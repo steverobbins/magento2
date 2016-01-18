@@ -55,17 +55,17 @@ class AdminUserCreateCommand extends AbstractSetupCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $data = $this->getUserData($input, $output);
-        $errors = $this->validate($data);
+        $this->setMissingValues($input, $output);
+        $errors = $this->validate($input);
         if ($errors) {
             $output->writeln('<error>' . implode('</error>' . PHP_EOL .  '<error>', $errors) . '</error>');
             // we must have an exit code higher than zero to indicate something was wrong
             return \Magento\Framework\Console\Cli::RETURN_FAILURE;
         }
         $installer = $this->installerFactory->create(new ConsoleLogger($output));
-        $installer->installAdminUser($data);
+        $installer->installAdminUser($input->getOptions());
         $output->writeln(
-            '<info>Created Magento administrator user named ' . $data[AdminAccount::KEY_USER] . '</info>'
+            '<info>Created Magento administrator user named ' . $input->getOption(AdminAccount::KEY_USER) . '</info>'
         );
     }
 
@@ -98,20 +98,20 @@ class AdminUserCreateCommand extends AbstractSetupCommand
     /**
      * Check if all admin options are provided
      *
-     * @param string[] $input
+     * @param InputInterface $input
      * @return string[]
      */
-    public function validate(array $data)
+    public function validate(InputInterface $input)
     {
         $errors = [];
         $user = new \Magento\Framework\DataObject();
-        $user->setFirstname($data[AdminAccount::KEY_FIRST_NAME])
-            ->setLastname($data[AdminAccount::KEY_LAST_NAME])
-            ->setUsername($data[AdminAccount::KEY_USER])
-            ->setEmail($data[AdminAccount::KEY_EMAIL])
+        $user->setFirstname($input->getOption(AdminAccount::KEY_FIRST_NAME))
+            ->setLastname($input->getOption(AdminAccount::KEY_LAST_NAME))
+            ->setUsername($input->getOption(AdminAccount::KEY_USER))
+            ->setEmail($input->getOption(AdminAccount::KEY_EMAIL))
             ->setPassword(
-                $data[AdminAccount::KEY_PASSWORD] === null
-                ? '' : $data[AdminAccount::KEY_PASSWORD]
+                $input->getOption(AdminAccount::KEY_PASSWORD) === null
+                ? '' : $input->getOption(AdminAccount::KEY_PASSWORD)
             );
 
         $validator = new \Magento\Framework\Validator\DataObject;
@@ -130,12 +130,11 @@ class AdminUserCreateCommand extends AbstractSetupCommand
      *
      * @param InputInterface $input
      * @param OutputInterface $output
-     * @return string[]
+     * @return void
      */
-    protected function getUserData(InputInterface $input, OutputInterface $output)
+    protected function setMissingValues(InputInterface &$input, OutputInterface $output)
     {
         $dialog = $this->getHelper('dialog');
-        $data = [];
         $keys = [
             AdminAccount::KEY_FIRST_NAME,
             AdminAccount::KEY_LAST_NAME,
@@ -144,16 +143,9 @@ class AdminUserCreateCommand extends AbstractSetupCommand
             AdminAccount::KEY_PASSWORD,
         ];
         foreach ($keys as $key) {
-            if ($value = $input->getOption($key)) {
-                $data[$key] = $value;
-            } else {
-                $method = $key === AdminAccount::KEY_PASSWORD ? 'askHiddenResponse' : 'ask';
-                $data[$key] = $dialog->$method(
-                    $output,
-                    '<info>' . ucwords(str_replace('-', ' ', $key)) . '</info>: '
-                );
+            if (!$input->getOption($key)) {
+                $input->promptForOption($dialog, $output, $key, $key === AdminAccount::KEY_PASSWORD);
             }
         }
-        return $data;
     }
 }
